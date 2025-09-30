@@ -1,144 +1,35 @@
-# 🚀 Qdrant in Agentic AI Projects
+content = """# 🚀 Qdrant in Agentic AI Projects — Complete Guide
 
-Qdrant acts as the **semantic memory** of an Agentic AI system.  
-It stores embeddings of **knowledge, past interactions, and intents** so the AI can recall relevant information based on meaning — not just keywords.
+This guide explains how to use **Qdrant**, **AI models (LLMs & Embeddings)**, and **Postgres** together in an **Agentic AI system** for advanced intent detection, memory, and orchestration.
 
 ---
 
-## 🔹 1. Full Flow of Qdrant in Agentic AI
+## 🔹 1. Roles of Key Components
+
+| Component        | Role in System | Example |
+|------------------|----------------|---------|
+| **AI (Embeddings)** | Encodes user queries, intents, and documents into high-dimensional vectors that capture semantic meaning. | "schedule a meeting" → `[0.23, 0.81, ...]` |
+| **AI (LLMs)** | Understands context, disambiguates meaning, and makes final reasoning decisions. | Classifies ambiguous queries like "I'm worried about my delivery." |
+| **Qdrant Vector DB** | Stores embeddings (semantic memory), enables fast similarity search, supports multi-vector queries. | Finds that "set up a call" is closest to `appointment_scheduling`. |
+| **Postgres (RDBMS)** | Stores structured transactional data: users, orders, history, metadata. | Looks up user profile, order status, appointment slots. |
+| **LLM Orchestrator** | Acts as the “brain” — combines inputs from Qdrant + Postgres, applies logic, selects the right intent or agent. | Decides whether to trigger scheduling API or order-tracking API. |
+
+---
+
+## 🔹 2. Full Architecture Flow
 
 ```mermaid
 flowchart TD
-    A[🧑 User Input] --> B[⚙️ Embedding Model]
+    A[🧑 User Input] --> B[🔢 Embedding Generator]
     B --> C[🧠 Qdrant Vector DB]
-    C --> D[📊 Postgres / Structured DB]
-    D --> E[🤖 LLM Orchestrator]
-    E --> F[💬 Response to User]
-    F --> G[📝 Feedback & Memory Update --> Qdrant]
-```
-
-**Steps**:
-1. **User Input** → Query
-2. **Embedding Model** → Converts query into a vector
-3. **Qdrant Search** → Retrieves similar knowledge/intents
-4. **Structured DB (Postgres)** → Provides facts/transactions
-5. **LLM Orchestrator** → Combines Qdrant + DB context
-6. **Response** → Natural language back to the user
-7. **Memory Update** → Store new embeddings into Qdrant
-
----
-
-## 🔹 2. Advanced Intent Detection
-
-Agentic AI uses **multi-method intent detection**:
-
-| Method            | Speed  | Accuracy | Use Case | Example |
-|-------------------|--------|----------|----------|---------|
-| **Rule-Based**    | ⚡ ~5ms | 70-80%   | Exact matches | "book appointment" → `appointment_scheduling` |
-| **Vector-Based**  | ⏱️ ~200ms | 85-90%   | Semantic similarity | "I need to schedule a meeting" → `appointment_scheduling` |
-| **LLM-Based**     | ⏱️ ~200ms | 90-95%   | Context-heavy input | "My package hasn't arrived" → `order_management` |
-| **Hybrid**        | 🌀 ~600ms | 92-97%   | Critical accuracy | Combines all 3 |
-
----
-
-## 🔹 3. Approaches to Store Intents in Qdrant
-
-- **Single Vector** → One embedding per intent
-- **Multi-Vector** → Multiple embeddings per intent (title, examples, description)
-- **Hybrid** → Vector search + metadata filters
-- **Episodic Memory** → Store past user conversations
-- **Domain-Specific Buckets** → Separate collections for each domain
-
----
-
-## 🔹 4. Multi-Vector Representation
-
-Multi-vector means **each point can hold multiple embeddings**.  
-This is useful because queries can match different aspects (title, examples, or description).
-
-### Example Schema
-```ts
-await qdrant.collections.create({
-  collection_name: "intents",
-  vectors: {
-    title_vector: { size: 768, distance: "Cosine" },
-    example_vector: { size: 768, distance: "Cosine" },
-    description_vector: { size: 768, distance: "Cosine" }
-  }
-});
-```
-
-### Example Data
-```ts
-await qdrant.points.upsert("intents", {
-  points: [
-    {
-      id: "appointment_scheduling",
-      vectors: {
-        title_vector: embTitle,
-        example_vector: embExamples,
-        description_vector: embDescription
-      },
-      payload: { intent: "appointment_scheduling", domain: "support" }
-    }
-  ]
-});
-```
-
----
-
-## 🔹 5. Querying with Multi-Vectors
-
-- **Single Vector Search**
-```ts
-qdrant.points.search("intents", {
-  vector: { name: "example_vector", vector: queryEmbedding },
-  limit: 5
-});
-```
-
-- **Weighted Hybrid Search**
-```ts
-qdrant.points.search("intents", {
-  query: [
-    { name: "title_vector", vector: queryEmbedding, weight: 0.5 },
-    { name: "example_vector", vector: queryEmbedding, weight: 1.0 },
-    { name: "description_vector", vector: queryEmbedding, weight: 0.7 }
-  ],
-  limit: 5
-});
-```
-
----
-
-## 🔹 6. Advantages of Multi-Vector Representation
-
-✅ Richer representation → capture multiple perspectives  
-✅ Robust matching → works for short, long, or noisy queries  
-✅ Domain weighting → prioritize specific aspects dynamically  
-✅ Multi-modal → combine text, audio, images together  
-
----
-
-## 🔹 7. Example Flow: Intent Detection with Multi-Vector
-
-```mermaid
-flowchart TD
-    U[🧑 User Query] --> E[🔢 Embedding Generator]
-    E --> T[📦 title_vector]
-    E --> X[📦 example_vector]
-    E --> D[📦 description_vector]
-    T --> R[🔍 Qdrant Search]
-    X --> R
-    D --> R
-    R --> O[⚖️ Orchestrator Combines Scores]
-    O --> I[✅ Final Intent]
-```
-
----
-
-# ✨ Summary
-
-- **AI** = Brain (understands meaning & context)  
-- **Vector DB (Qdrant)** = Memory (semantic recall)  
-- **Hybrid Orchestration** = Strategy (chooses best path for intent detection)  
+    A --> D[📜 Rule-Based Classifier]
+    A --> E[🤖 LLM Classifier]
+    C --> F[⚖️ Hybrid Scorer]
+    D --> F
+    E --> F
+    F --> G[🧩 LLM Orchestrator]
+    G --> H[📊 Postgres Lookup]
+    H --> G
+    G --> I[✅ Final Intent & Action]
+    I --> J[💬 Response to User]
+    J --> K[📝 Memory Update → Qdrant]
