@@ -109,7 +109,7 @@ console.log(result);
 ---
 
 ## **3.2 Multi-Vector Approach**
-## 🔹 Multiple Points per Intent (3.2 Multi-Vector Approach)
+## 🔹 Multiple Points per Intent
 
 ### Concept
 Each intent can have **multiple embeddings** (title, description, training phrases).  
@@ -155,7 +155,7 @@ for (let i = 0; i < inputs.length; i++) {
 
 ---
 
-## 🔹 Single Point with Named Vectors (Multi-Vector Representation)
+## 🔹 Single Point with Named Vectors
 
 ### Concept
 Each intent is stored as **one point**, but with **multiple named vectors** (title, examples, description).  
