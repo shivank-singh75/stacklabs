@@ -159,6 +159,26 @@ for (let i = 0; i < inputs.length; i++) {
 
 - **Node.js Example**:
 ```js
+
+const hotelEmb = await openai.embeddings.create({
+  model: "text-embedding-3-small",
+  input: "Book a hotel"
+});
+
+await qdrant.upsert("intents", {
+  points: [
+    {
+      id: 101,
+      vector: hotelEmb.data[0].embedding,
+      payload: { 
+        intent: "HotelBooking", 
+        domain: "travel",
+        category: "accommodation" 
+      }
+    }
+  ]
+});
+
 const queryEmbedding = await openai.embeddings.create({
   model: "text-embedding-3-small",
   input: "Find me a hotel in Paris"
@@ -168,7 +188,9 @@ const result = await qdrant.search("intents", {
   vector: queryEmbedding.data[0].embedding,
   limit: 1,
   filter: {
-    must: [{ key: "domain", match: { value: "travel" } }]
+    must: [
+      { key: "domain", match: { value: "travel" } } // Filter by domain
+    ]
   }
 });
 
