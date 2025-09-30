@@ -51,6 +51,219 @@ Agentic AI uses **multi-method intent detection**:
 
 ---
 
+## **3.1 Single Vector Approach**
+- **Concept**:  
+  Each **intent** is stored as a **single embedding vector** (e.g., using the intent’s canonical name or description).  
+  - Pros: Simple, easy to maintain.  
+  - Cons: Limited representation (misses variety in phrasing).  
+
+- **Realtime Example**:  
+  Intent: *BookFlight*  
+  - Store embedding for `"Book a flight"`  
+  - Query `"I want to fly to New York"` → Should match `"BookFlight"` intent.
+
+- **Node.js Example**:
+```js
+import { QdrantClient } from "@qdrant/js-client-rest";
+import OpenAI from "openai";
+
+const qdrant = new QdrantClient({ url: "http://localhost:6333" });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// Create collection
+await qdrant.recreateCollection({
+  collection_name: "intents",
+  vectors: { size: 1536, distance: "Cosine" },
+});
+
+// Store single vector per intent
+const embedding = await openai.embeddings.create({
+  model: "text-embedding-3-small",
+  input: "Book a flight"
+});
+
+await qdrant.upsert("intents", {
+  points: [
+    {
+      id: 1,
+      vector: embedding.data[0].embedding,
+      payload: { intent: "BookFlight" }
+    }
+  ]
+});
+
+// Query
+const queryEmbedding = await openai.embeddings.create({
+  model: "text-embedding-3-small",
+  input: "I want to fly to New York"
+});
+
+const result = await qdrant.search("intents", {
+  vector: queryEmbedding.data[0].embedding,
+  limit: 1
+});
+
+console.log(result);
+```
+
+---
+
+## **3.2 Multi-Vector Approach**
+- **Concept**:  
+  Each intent can have **multiple embeddings** (title, description, training phrases).  
+  - Pros: Better semantic coverage.  
+  - Cons: Larger storage and more queries.  
+
+- **Realtime Example**:  
+  Intent: *BookFlight*  
+  - Title: `"Book a flight"`  
+  - Example: `"Get me a ticket"`  
+  - Example: `"I need to travel tomorrow"`
+
+- **Node.js Example**:
+```js
+const inputs = [
+  "Book a flight", 
+  "Get me a ticket", 
+  "I need to travel tomorrow"
+];
+
+for (let i = 0; i < inputs.length; i++) {
+  const emb = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: inputs[i]
+  });
+
+  await qdrant.upsert("intents", {
+    points: [
+      {
+        id: Date.now() + i,
+        vector: emb.data[0].embedding,
+        payload: { intent: "BookFlight", phrase: inputs[i] }
+      }
+    ]
+  });
+}
+```
+
+---
+
+## **3.3 Hybrid Approach (Vector + Metadata Filters)**
+- **Concept**:  
+  Use **vector similarity** + **filters (metadata)** for higher precision.  
+  - Pros: Combine semantic + structured search.  
+  - Cons: More complex queries.  
+
+- **Realtime Example**:  
+  Query `"Find a hotel in Paris"` should match *HotelBooking* but filtered by `"domain": "travel"`.
+
+- **Node.js Example**:
+```js
+const queryEmbedding = await openai.embeddings.create({
+  model: "text-embedding-3-small",
+  input: "Find me a hotel in Paris"
+});
+
+const result = await qdrant.search("intents", {
+  vector: queryEmbedding.data[0].embedding,
+  limit: 1,
+  filter: {
+    must: [{ key: "domain", match: { value: "travel" } }]
+  }
+});
+
+console.log(result);
+```
+
+---
+
+## **3.4 Episodic Memory Approach**
+- **Concept**:  
+  Store **past user queries + system responses** as embeddings for contextual recall.  
+  - Pros: Personalized interactions.  
+  - Cons: Needs pruning/expiry for efficiency.  
+
+- **Realtime Example**:  
+  - User: `"I want to book a flight"`  
+  - System: `"Where do you want to go?"`  
+  - Store this as episodic memory → Next query `"To Paris"` will be interpreted in context.  
+
+- **Node.js Example**:
+```js
+const memory = [
+  { role: "user", content: "I want to book a flight" },
+  { role: "assistant", content: "Where do you want to go?" }
+];
+
+for (let i = 0; i < memory.length; i++) {
+  const emb = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: memory[i].content
+  });
+
+  await qdrant.upsert("episodic_memory", {
+    points: [
+      {
+        id: Date.now() + i,
+        vector: emb.data[0].embedding,
+        payload: { role: memory[i].role, text: memory[i].content }
+      }
+    ]
+  });
+}
+```
+
+---
+
+## **3.5 Domain-Specific Buckets**
+- **Concept**:  
+  Maintain **separate collections per domain** (e.g., Travel, Banking, Healthcare).  
+  - Pros: Scalability, cleaner separation.  
+  - Cons: Slightly harder cross-domain search.  
+
+- **Realtime Example**:  
+  - Collection `travel_intents` → `"BookFlight"`, `"HotelBooking"`  
+  - Collection `banking_intents` → `"CheckBalance"`, `"TransferMoney"`
+
+- **Node.js Example**:
+```js
+await qdrant.recreateCollection({
+  collection_name: "travel_intents",
+  vectors: { size: 1536, distance: "Cosine" }
+});
+
+await qdrant.recreateCollection({
+  collection_name: "banking_intents",
+  vectors: { size: 1536, distance: "Cosine" }
+});
+
+// Insert into travel collection
+const travelEmb = await openai.embeddings.create({
+  model: "text-embedding-3-small",
+  input: "Book a flight"
+});
+
+await qdrant.upsert("travel_intents", {
+  points: [
+    { id: 1, vector: travelEmb.data[0].embedding, payload: { intent: "BookFlight" } }
+  ]
+});
+```
+
+---
+
+## **📊 Comparison Table**
+
+| Approach | Pros | Cons | Best Use Case |
+|----------|------|------|---------------|
+| **Single Vector** | Simple, fast, low storage | Poor coverage for phrasing variations | Small projects, baseline |
+| **Multi-Vector** | Rich semantic coverage | More storage + compute | Conversational bots with varied phrasing |
+| **Hybrid** | Combines semantic + filters | Query complexity | When metadata/domain filters are required |
+| **Episodic Memory** | Personalized, context-aware | Needs memory management | Conversational agents with history |
+| **Domain Buckets** | Scalable, clean separation | Harder cross-domain search | Multi-domain assistants |
+
+---
+
 ## 🔹 4. Multi-Vector Representation
 
 Multi-vector means **each point can hold multiple embeddings**.  
