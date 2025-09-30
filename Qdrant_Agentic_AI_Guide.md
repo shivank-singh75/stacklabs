@@ -159,12 +159,13 @@ for (let i = 0; i < inputs.length; i++) {
 
 - **Node.js Example**:
 ```js
-
+// Create embedding for the intent "Book a hotel"
 const hotelEmb = await openai.embeddings.create({
   model: "text-embedding-3-small",
   input: "Book a hotel"
 });
 
+// Upsert the intent into Qdrant with metadata
 await qdrant.upsert("intents", {
   points: [
     {
@@ -179,11 +180,13 @@ await qdrant.upsert("intents", {
   ]
 });
 
+// Create embedding for the user query
 const queryEmbedding = await openai.embeddings.create({
   model: "text-embedding-3-small",
   input: "Find me a hotel in Paris"
 });
 
+// Search with vector + metadata filter
 const result = await qdrant.search("intents", {
   vector: queryEmbedding.data[0].embedding,
   limit: 1,
