@@ -109,18 +109,22 @@ console.log(result);
 ---
 
 ## **3.2 Multi-Vector Approach**
-- **Concept**:  
-  Each intent can have **multiple embeddings** (title, description, training phrases).  
-  - Pros: Better semantic coverage.  
-  - Cons: Larger storage and more queries.  
+## 🔹 Multiple Points per Intent (3.2 Multi-Vector Approach)
 
-- **Realtime Example**:  
-  Intent: *BookFlight*  
-  - Title: `"Book a flight"`  
-  - Example: `"Get me a ticket"`  
-  - Example: `"I need to travel tomorrow"`
+### Concept
+Each intent can have **multiple embeddings** (title, description, training phrases).  
+Each example is stored as a **separate point** in Qdrant.
 
-- **Node.js Example**:
+- **Pros**: Better semantic coverage, simple to implement.  
+- **Cons**: Larger storage, duplicate payloads, need post-processing to merge results.  
+
+### Realtime Example
+Intent: *BookFlight*  
+- Title: "Book a flight"  
+- Example: "Get me a ticket"  
+- Example: "I need to travel tomorrow"
+
+### Node.js Example
 ```js
 const inputs = [
   "Book a flight", 
@@ -137,14 +141,83 @@ for (let i = 0; i < inputs.length; i++) {
   await qdrant.upsert("intents", {
     points: [
       {
-        id: Date.now() + i,
+        id: `book_flight_${i}`, // unique per example
         vector: emb.data[0].embedding,
-        payload: { intent: "BookFlight", phrase: inputs[i] }
+        payload: { 
+          intent: "BookFlight", 
+          phrase: inputs[i] 
+        }
       }
     ]
   });
 }
 ```
+
+---
+
+## 🔹 Single Point with Named Vectors (Multi-Vector Representation)
+
+### Concept
+Each intent is stored as **one point**, but with **multiple named vectors** (title, examples, description).  
+Requires defining a **schema** with multiple vectors.
+
+- **Pros**: Clean storage (one point per intent), consistent metadata.  
+- **Cons**: Slightly more complex setup, must specify vector name in queries.  
+
+### Example Schema
+```ts
+await qdrant.collections.create({
+  collection_name: "intents",
+  vectors: {
+    title_vector: { size: 768, distance: "Cosine" },
+    example_vector: { size: 768, distance: "Cosine" },
+    description_vector: { size: 768, distance: "Cosine" }
+  }
+});
+```
+
+### Example Data
+```ts
+await qdrant.points.upsert("intents", {
+  points: [
+    {
+      id: "book_flight", // single point for the intent
+      vectors: {
+        title_vector: embTitle,
+        example_vector: embExample,
+        description_vector: embDescription
+      },
+      payload: { 
+        intent: "BookFlight", 
+        domain: "travel" 
+      }
+    }
+  ]
+});
+```
+
+### Query Example
+```ts
+const queryEmb = await openai.embeddings.create({
+  model: "text-embedding-3-small",
+  input: "I need to book a flight to Paris"
+});
+
+// Search against a specific vector (e.g., example_vector)
+const result = await qdrant.search("intents", {
+  vector: queryEmb.data[0].embedding,
+  limit: 1,
+  using: "example_vector" // specify which vector to search on
+});
+
+console.log(result);
+```
+
+### Key Difference
+- **Multiple Points per Intent** → Multiple **points** per intent (one per phrase).  
+- **Single Point with Named Vectors** → One **point** per intent with multiple **named vectors**.  
+
+Think of **Multiple Points** as “flattened examples” and **Single Point** as “structured schema”.
 
 ---
 
